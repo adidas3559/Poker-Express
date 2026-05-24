@@ -189,11 +189,10 @@ describe('raiseHandler', () => {
     expect(result.error).toBeTruthy();
   });
 
-  it('triggers a phase change when the current player is last to act', () => {
-    // currentPlayerIndex 1, lastRaisePlayerIndex 2 → next after 1 is 2 = lastRaise → end of round
+  it('does not advance the phase even when acting last, because a raise reopens action', () => {
     const game = makeGame({ currentPlayerIndex: 1, lastRaisePlayerIndex: 2 });
     const result = raiseHandler(game, 10);
-    expect(result.phase).toBe('flop');
+    expect(result.phase).toBe('preflop');
   });
 });
 
