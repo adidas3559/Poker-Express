@@ -130,10 +130,9 @@ const raiseHandler = (game: GameState, betInput: number):GameState => {
   players[game.currentPlayerIndex].currentBet = currentBet;
   const pot = game.pot + raiseDelta;
   const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
-  // if (lastPlayer) {
-  //   console.log('lastPlayer RaiseHandler')
-  //   return updateRoundState({ ...game, pot, players, currentBet, currentPlayerIndex, lastRaisePlayerIndex });
-  // }
+  if (lastPlayer) {
+    return updateRoundState({ ...game, pot, players, currentBet, currentPlayerIndex, lastRaisePlayerIndex });
+  }
   return {
     ...game,
     players,

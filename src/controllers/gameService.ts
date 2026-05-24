@@ -49,7 +49,7 @@ const testInitGame = (): GameState => {
 type RoomState = {
   roomName: string;
   roomCode: string;
-  host: 'string';
+  host: string;
   players: { id: string, socketId: string, nickname: string }[];
 }
 

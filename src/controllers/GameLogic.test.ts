@@ -466,10 +466,10 @@ describe('updateRoundState (preflop → flop)', () => {
     expect(result.lastRaisePlayerIndex).toBe(1);
   });
 
-  it('mutates input game.phase as a side effect (known bug)', () => {
+  it('does not mutate the input game', () => {
     const game = makePhaseGame('preflop');
     updateRoundState(game);
-    expect(game.phase).toBe('flop');
+    expect(game.phase).toBe('preflop');
   });
 });
 
@@ -536,9 +536,7 @@ describe('updateRoundState (river → end)', () => {
   it('awards pot chips to the winning player', () => {
     const game = makeBenWinsGame();
     const result = updateRoundState(game);
-    console.log('🚀 ~ result:', result);
-    // player 0 has pair of aces and should win
-    expect(game.players[5].chips).toBeGreaterThan(game.players[5].chips);
+    expect(result.players[4].chips).toBeGreaterThan(game.players[4].chips);
   });
 
   it('Second place winner gets chips', () => {
