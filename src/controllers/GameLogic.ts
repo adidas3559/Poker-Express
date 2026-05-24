@@ -114,6 +114,8 @@ const setBlind = (player: PlayerState, blind: number): number => {
 
 const raiseHandler = (game: GameState, betInput: number):GameState => {
   const players = copyPlayers(game.players);
+  console.log('🚀 ~ raiseHandler ~ players:', players);
+  console.log('🚀 ~ raiseHandler ~ betInput:', betInput);
   if (betInput > players[game.currentPlayerIndex].chips) {
     return { ...game, error: 'not enough chips!' };
   }
@@ -128,9 +130,10 @@ const raiseHandler = (game: GameState, betInput: number):GameState => {
   players[game.currentPlayerIndex].currentBet = currentBet;
   const pot = game.pot + raiseDelta;
   const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
-  if (lastPlayer) {
-    return updateRoundState({ ...game, pot, players, currentPlayerIndex });
-  }
+  // if (lastPlayer) {
+  //   console.log('lastPlayer RaiseHandler')
+  //   return updateRoundState({ ...game, pot, players, currentBet, currentPlayerIndex, lastRaisePlayerIndex });
+  // }
   return {
     ...game,
     players,
@@ -185,7 +188,7 @@ const callHandler = (game: GameState): GameState => {
     const updatedGame = { ...game, players };
     const { currentPlayerIndex, lastPlayer } = checkNextPlayer(updatedGame);
     if (lastPlayer) {
-      return updateRoundState({ ...updatedGame, currentPlayerIndex });
+      return updateRoundState({ ...updatedGame, players, currentPlayerIndex });
     }
     if (index === game.lastRaisePlayerIndex) {
       return {
@@ -389,6 +392,7 @@ const declareWinner = (winners: nestedPlayers, game: GameState): GameState => {
     players,
     phase,
     dealerIndex,
+    winners,
   }
 }
 

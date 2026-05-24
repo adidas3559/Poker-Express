@@ -31,10 +31,18 @@ const handler = (io) => {
         return;
       }
 
+      const existing = room.players.find(p => p.nickname === nickname);
+      if (existing) {
+        existing.socketId = socket.id;
+        socket.join(roomCode);
+        socket.emit('lobbyUpdated', { room, playerId: existing.id, nickname });
+        socket.broadcast.to(roomCode).emit('lobbyUpdated', { room });
+        return;
+      }
+
       const playerId = randomUUID();
       room.players.push({ id: playerId, socketId: socket.id, nickname });
       socket.join(roomCode);
-      // joining socket gets playerId + nickname; existing members just get updated room
       socket.emit('lobbyUpdated', { room, playerId, nickname });
       socket.broadcast.to(roomCode).emit('lobbyUpdated', { room });
     });
@@ -74,6 +82,7 @@ const handler = (io) => {
       if (!player) { socket.emit('error', { message: 'Player not found' }); return; }
 
       player.socketId = socket.id;
+      socket.join(roomCode);
 
       room.gameState = null;
       socket.emit('lobbyUpdated', { room, playerId: player.id, nickname: player.nickname });
