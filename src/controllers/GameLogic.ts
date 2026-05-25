@@ -114,9 +114,7 @@ const setBlind = (player: PlayerState, blind: number): number => {
 
 const raiseHandler = (game: GameState, betInput: number):GameState => {
   const players = copyPlayers(game.players);
-  console.log('🚀 ~ raiseHandler ~ players:', players);
-  console.log('🚀 ~ raiseHandler ~ betInput:', betInput);
-  if (betInput > players[game.currentPlayerIndex].chips) {
+  if (betInput + (game.currentBet - players[game.currentPlayerIndex].currentBet) > players[game.currentPlayerIndex].chips) {
     return { ...game, error: 'not enough chips!' };
   }
   if (betInput < game.bigBlind) {
@@ -162,79 +160,79 @@ const callHandler = (game: GameState): GameState => {
   }
 }
 
-  const checkHandler = (game: GameState): GameState => {
-    const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
-    if (lastPlayer) {
-      return updateRoundState({ ...game, currentPlayerIndex });
-    }
-    return {
-      ...game,
-      currentPlayerIndex,
-    }
+const checkHandler = (game: GameState): GameState => {
+  const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
+  if (lastPlayer) {
+    return updateRoundState({ ...game, currentPlayerIndex });
   }
+  return {
+    ...game,
+    currentPlayerIndex,
+  }
+}
 
-  const foldHandler = (game: GameState): GameState => {
-    const players = copyPlayers(game.players);
-    players[game.currentPlayerIndex].status = 'folded';
-    const nonFoldedPlayers = players.filter(player => player.status !== 'folded');
-    if (nonFoldedPlayers.length === 1) {
-      return declareWinner(nonFoldedPlayers, { ...game, players });
-    }
-    const index = game.currentPlayerIndex;
-    const updatedGame = { ...game, players };
-    const { currentPlayerIndex, lastPlayer } = checkNextPlayer(updatedGame);
-    if (lastPlayer) {
-      return updateRoundState({ ...updatedGame, players, currentPlayerIndex });
-    }
-    if (index === game.lastRaisePlayerIndex) {
-      return {
-        ...game,
-        players,
-        currentPlayerIndex,
-        lastRaisePlayerIndex: game.currentPlayerIndex,
-      }
-    }
-
+const foldHandler = (game: GameState): GameState => {
+  const players = copyPlayers(game.players);
+  players[game.currentPlayerIndex].status = 'folded';
+  const nonFoldedPlayers = players.filter(player => player.status !== 'folded');
+  if (nonFoldedPlayers.length === 1) {
+    return declareWinner(nonFoldedPlayers, { ...game, players });
+  }
+  const index = game.currentPlayerIndex;
+  const updatedGame = { ...game, players };
+  const { currentPlayerIndex, lastPlayer } = checkNextPlayer(updatedGame);
+  if (lastPlayer) {
+    return updateRoundState({ ...updatedGame, players, currentPlayerIndex });
+  }
+  if (index === game.lastRaisePlayerIndex) {
     return {
       ...game,
       players,
       currentPlayerIndex,
+      lastRaisePlayerIndex: game.currentPlayerIndex,
     }
   }
 
-  const allInHandler = (game: GameState): GameState => {
-    const players = copyPlayers(game.players);
-    let currentBet = game.currentBet;
-    let lastRaisePlayerIndex = game.lastRaisePlayerIndex;
-    const allInAmount = players[game.currentPlayerIndex].chips + players[game.currentPlayerIndex].currentBet;
-    if (allInAmount > currentBet) {
-      currentBet = allInAmount;
-      lastRaisePlayerIndex = game.currentPlayerIndex;
-    }
-    const pot = game.pot + players[game.currentPlayerIndex].chips;
-    players[game.currentPlayerIndex].currentBet = allInAmount;
-    players[game.currentPlayerIndex].chips = 0;
+  return {
+    ...game,
+    players,
+    currentPlayerIndex,
+  }
+}
 
-    const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
-    if (lastPlayer) {
-      return updateRoundState({
-        ...game,
-        players,
-        currentBet,
-        pot,
-        currentPlayerIndex,
-        lastRaisePlayerIndex,
-      });
-    }
-    return {
+const allInHandler = (game: GameState): GameState => {
+  const players = copyPlayers(game.players);
+  let currentBet = game.currentBet;
+  let lastRaisePlayerIndex = game.lastRaisePlayerIndex;
+  const allInAmount = players[game.currentPlayerIndex].chips + players[game.currentPlayerIndex].currentBet;
+  if (allInAmount > currentBet) {
+    currentBet = allInAmount;
+    lastRaisePlayerIndex = game.currentPlayerIndex;
+  }
+  const pot = game.pot + players[game.currentPlayerIndex].chips;
+  players[game.currentPlayerIndex].currentBet = allInAmount;
+  players[game.currentPlayerIndex].chips = 0;
+
+  const { currentPlayerIndex, lastPlayer } = checkNextPlayer(game);
+  if (lastPlayer) {
+    return updateRoundState({
       ...game,
       players,
       currentBet,
       pot,
       currentPlayerIndex,
       lastRaisePlayerIndex,
-    }
+    });
   }
+  return {
+    ...game,
+    players,
+    currentBet,
+    pot,
+    currentPlayerIndex,
+    lastRaisePlayerIndex,
+  }
+}
 
 
 
@@ -244,7 +242,8 @@ const callHandler = (game: GameState): GameState => {
 const checkNextPlayer = (game: GameState) => {
   const nextPlayerIndex = getNextActiveIndex(game.players, game.currentPlayerIndex);
   if (nextPlayerIndex === game.lastRaisePlayerIndex) {
-    return { currentPlayerIndex: game.currentPlayerIndex, lastPlayer: true }
+    const currentPlayerIndex = nextPlayersTurn(game);
+    return { currentPlayerIndex, lastPlayer: true }
   } else {
     const currentPlayerIndex = nextPlayersTurn(game);
     return { currentPlayerIndex, lastPlayer: false };

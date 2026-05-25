@@ -99,9 +99,31 @@ const handler = (io) => {
 
       room.players = room.players.filter((p) => p.id !== playerId);
 
+      if (room.players.length === 0) {
+        delete rooms[roomCode];
+        socket.leave(roomCode);
+        return;
+      }
+
       // emit before socket.leave so the departing player also receives the updated list
       io.to(roomCode).emit('lobbyUpdated', { room });
       socket.leave(roomCode);
+    });
+
+    socket.on('disconnect', () => {
+      for (const roomCode of Object.keys(rooms)) {
+        const room = rooms[roomCode];
+        const wasInRoom = room.players.some(p => p.socketId === socket.id);
+        if (!wasInRoom) continue;
+
+        room.players = room.players.filter(p => p.socketId !== socket.id);
+
+        if (room.players.length === 0) {
+          delete rooms[roomCode];
+        } else {
+          io.to(roomCode).emit('lobbyUpdated', { room });
+        }
+      }
     });
   });
 };
