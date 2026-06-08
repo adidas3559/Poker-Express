@@ -8,15 +8,27 @@ const {
   foldHandler,
   allInHandler,
 } = require('../controllers/gameService');
+const { autoFoldDisconnected, disconnectTimers } = require('./createGame');
 
 module.exports = (io, rooms) => {
   io.on('connection', (socket) => {
 
-    socket.on('initGame', ({ roomCode }) => {
+    socket.on('initGame', ({ roomCode, playerId }) => {
       const room = rooms[roomCode];
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
 
       socket.join(roomCode);
+
+      if (playerId) {
+        const player = room.players.find(p => p.id === playerId);
+        if (player && player.disconnected) {
+          clearTimeout(disconnectTimers[playerId]);
+          delete disconnectTimers[playerId];
+          player.socketId = socket.id;
+          player.disconnected = false;
+          io.to(roomCode).emit('lobbyUpdated', { room });
+        }
+      }
 
       if (!room.gameState) {
         room.gameState = initGame(room);
@@ -45,6 +57,7 @@ module.exports = (io, rooms) => {
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
       room.gameState = raiseHandler(room.gameState, betAmount);
       io.to(roomCode).emit('gameUpdated', { gameState: room.gameState });
+      autoFoldDisconnected(io, roomCode);
     });
 
     socket.on('call', ({ roomCode }) => {
@@ -52,6 +65,7 @@ module.exports = (io, rooms) => {
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
       room.gameState = callHandler(room.gameState);
       io.to(roomCode).emit('gameUpdated', { gameState: room.gameState });
+      autoFoldDisconnected(io, roomCode);
     });
 
     socket.on('check', ({ roomCode }) => {
@@ -59,6 +73,7 @@ module.exports = (io, rooms) => {
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
       room.gameState = checkHandler(room.gameState);
       io.to(roomCode).emit('gameUpdated', { gameState: room.gameState });
+      autoFoldDisconnected(io, roomCode);
     });
 
     socket.on('fold', ({ roomCode }) => {
@@ -66,6 +81,7 @@ module.exports = (io, rooms) => {
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
       room.gameState = foldHandler(room.gameState);
       io.to(roomCode).emit('gameUpdated', { gameState: room.gameState });
+      autoFoldDisconnected(io, roomCode);
     });
 
     socket.on('allIn', ({ roomCode }) => {
@@ -73,6 +89,7 @@ module.exports = (io, rooms) => {
       if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
       room.gameState = allInHandler(room.gameState);
       io.to(roomCode).emit('gameUpdated', { gameState: room.gameState });
+      autoFoldDisconnected(io, roomCode);
     });
 
   });

@@ -1,5 +1,5 @@
 import type { CardState, GameState, PlayerState, GamePhase } from "../types/GameState"
-import { createDeck, shuffleDeck, getNextActiveIndex, howManyActivePlayers, drawCard, getLeftOfDealer, getHandRanking, contestHands, copyPlayers } from './utils';
+import { createDeck, shuffleDeck, getNextActiveIndex, getNextActivePlayer, howManyActivePlayers, drawCard, getLeftOfDealer, getHandRanking, contestHands, copyPlayers } from './utils';
 
 
 
@@ -336,13 +336,19 @@ const declareWinner = (winners: nestedPlayers, game: GameState): GameState => {
     };
   }
 
+  const players = copyPlayers(game.players);
+
   const getMaxWinning = (player: PlayerState) => {
-    const players = game.players.filter(p => p.name !== player.name);
-    const playerBet = player.currentBet;
+    // const nonWinnerPlayers = players.filter(p => p.id !== player.id);
+    const currentPlayer = (players.find(p => p.id === player.id) || player);
+    const playerBet = currentPlayer.currentBet;
     let maxWinning = playerBet;
-    players.map(player => {
-      if (player.currentBet <= playerBet) {
-        maxWinning += player.currentBet;
+    players.forEach(p => {
+      if (p.id === currentPlayer.id) {
+        return;
+      }
+      if (p.currentBet <= playerBet) {
+        maxWinning += p.currentBet;
       } else {
         maxWinning += playerBet;
       }
@@ -351,21 +357,76 @@ const declareWinner = (winners: nestedPlayers, game: GameState): GameState => {
     return maxWinning;
   }
 
-  const players = copyPlayers(game.players);
+  const getMaxWinningGroup = (player: PlayerState, groupLength: number) => {
+    // const nonWinnerPlayers = players.filter(p => p.id !== player.id);)
+    const currentPlayer = (players.find(p => p.id === player.id) || player);
+    const playerBet = currentPlayer.currentBet;
+    let maxWinning = playerBet;
+    players.forEach(p => {
+      if (p.id === currentPlayer.id) {
+        return;
+      }
+      if (p.currentBet <= playerBet) {
+        maxWinning += p.currentBet;
+      } else {
+        maxWinning += playerBet
+      }
+    });
+
+    return { rawMaxWinning: Math.floor(maxWinning / groupLength) , carryOver: maxWinning % groupLength };
+  }
+
   let pot = game.pot;
 
   winners.forEach(winnerGroup => {
     if (Array.isArray(winnerGroup)) {
-      winnerGroup.forEach(winner => {
-        const maxWinning = getMaxWinning(winner);
-        const wonChips = Math.round(maxWinning / winnerGroup.length) <= pot ? Math.round(maxWinning / winnerGroup.length) : Math.round(pot / winnerGroup.length);
-        players.find(p => p.id === winner.id)!.chips += wonChips;
-        pot -= wonChips;
+      winnerGroup.sort((a, b) => a.currentBet - b.currentBet);
+      
+      winnerGroup.forEach((winner, index) => {
+        const currentGroupSize = (winnerGroup.length - index);
+        const {rawMaxWinning, carryOver} = getMaxWinningGroup(winner, currentGroupSize);
+        const wonChips = rawMaxWinning <= pot ? Math.round(rawMaxWinning) : pot;
+        // players.find(p => p.id === winner.id)!.chips += wonChips;
+        // pot -= wonChips;
+        // const playerBet = Math.round(players.find(p => p.id === winner.id)!.currentBet / winnerGroup.length);
+        const currentPlayer = (players.find(p => p.id === winner.id) || winner);
+        const playerBet = currentPlayer.currentBet;
+        players.forEach(p => {
+          if (winnerGroup.some(wg => wg.id === p.id) && p.currentBet > 0) {
+            p.chips += wonChips;
+            pot -= wonChips;
+          }
+          p.currentBet = playerBet > p.currentBet ? 0 : p.currentBet - playerBet
+          // if (p.id === winner.id) {
+          //   p.currentBet = 0;
+          // } else if (winnerGroup.some(wg => wg.id === p.id)) {
+          //   p.currentBet = playerBet > p.currentBet ? 0 : p.currentBet - playerBet
+          // } else {
+          //   p.currentBet = playerBet > p.currentBet ? 0 : p.currentBet - playerBet
+          // }
+          // p.currentBet = Math.round(playerBet / (winnerGroup.length - index));
+        });
+
+        if (currentGroupSize >= 2 && carryOver > 0) {
+          const closestToDealer2 = getNextActivePlayer(players.filter(p => winnerGroup.some(w => w.id === p.id)), game.dealerIndex);
+
+          players.find(p => p.id === closestToDealer2.id)!.chips += 1;
+          pot -= 1;
+        }
       });
+
+      // if (pot % winnerGroup.length !== 0) {
+      //   const closestToDealer2 = getNextActivePlayer(players.filter(p => winnerGroup.some(w => w.id === p.id)), game.dealerIndex);
+
+      //   players.find(p => p.id === closestToDealer2.id)!.chips += 1;
+      //   pot -= 1;
+      // }
     } else {
       const maxWinning = getMaxWinning(winnerGroup);
       const wonChips = maxWinning <= pot ? Math.round(maxWinning) : pot;
       players.find(p => p.id === winnerGroup.id)!.chips += wonChips;
+      const playerBet = players.find(p => p.id === winnerGroup.id)!.currentBet;
+      players.forEach(p => p.currentBet = playerBet > p.currentBet ? 0 : p.currentBet - playerBet)
       pot -= wonChips;
     }
   })

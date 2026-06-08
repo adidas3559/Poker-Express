@@ -385,7 +385,6 @@ const makeRiverGame = (): GameState => ({
   winners: [],
   error: '',
 });
-console.log('🚀 ~ makeRiverGame ~ makeRiverGame:', makeRiverGame);
 
 const makeBenLosesGame = (): GameState => ({
   players: [
@@ -409,7 +408,6 @@ const makeBenLosesGame = (): GameState => ({
   winners: [],
   error: '',
 });
-console.log('🚀 ~ makeBenLosesGame ~ makeBenLosesGame:', makeBenLosesGame);
 
 const makeBenWinsGame = (): GameState => ({
   players: [
@@ -540,9 +538,7 @@ describe('updateRoundState (river → end)', () => {
 
   it('Second place winner gets chips', () => {
     const game = makeBenWinsGame();
-    console.log('🚀 ~ game:', game);
     const result = updateRoundState(game);
-    console.log('🚀 ~ result:', result);
     expect(game.players[1].chips).toBe(game.players[1].chips);
   });
 
@@ -556,5 +552,350 @@ describe('updateRoundState (river → end)', () => {
     const game = makeBenWinsGame(); // dealerIndex: 0
     const result = updateRoundState(game);
     expect(result.dealerIndex).not.toBe(game.dealerIndex);
+  });
+});
+
+// --- Integration: 5-player river showdown with side pot ---
+
+describe('5-player river showdown: winner all-in for 10, side pot, two folds', () => {
+  // P0 (Winner)      — all-in for 10, best hand (pair of aces)
+  // P1 (Second)      — all-in for 20, second-best hand (pair of kings)
+  // P2 (Third)       — all-in for 20, third-best hand (pair of queens)
+  // P3 (FoldedFive)  — folded after 5 chips; has 45 chips remaining
+  // P4 (FoldedEight) — folded after 8 chips; has 42 chips remaining
+  // Pot = 10+20+20+5+8 = 63
+  // P0 side-pot cap: 10 from each other = 10+10+5+8 + own 10 = 43
+  // P1 wins remaining 20; P2 gets nothing (pot exhausted)
+  const makeShowdownGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'Winner',      hand: [c('ace', 'spades'),    c('ace', 'hearts')],    chips: 0,  currentBet: 10, status: 'active' },
+      { id: '1', name: 'Second',      hand: [c('king', 'hearts'),   c('king', 'diamonds')], chips: 0,  currentBet: 20, status: 'active' },
+      { id: '2', name: 'Third',       hand: [c('queen', 'diamonds'), c('queen', 'clubs')],  chips: 0,  currentBet: 20, status: 'active' },
+      { id: '3', name: 'FoldedFive',  hand: [],                                             chips: 45, currentBet: 5,  status: 'folded' },
+      { id: '4', name: 'FoldedEight', hand: [],                                             chips: 42, currentBet: 8,  status: 'folded' },
+    ],
+    deck: [],
+    tableCards: [c('7', 'spades'), c('8', 'hearts'), c('2', 'clubs'), c('3', 'diamonds'), c('4', 'spades')],
+    pot: 63,
+    currentBet: 20,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('sets phase to end', () => {
+    expect(updateRoundState(makeShowdownGame()).phase).toBe('end');
+  });
+
+  it('winner (all-in for 10) collects 43 chips via side pot', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[0].chips).toBe(43);
+  });
+
+  it('2nd place (all-in for 20) collects the remaining 20 chips', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[1].chips).toBe(20);
+  });
+
+  it('3rd place (all-in for 20) receives nothing and is marked busted', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[2].chips).toBe(0);
+    expect(result.players[2].status).toBe('busted');
+  });
+
+  it('folded players keep their remaining chips untouched', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[3].chips).toBe(45);
+    expect(result.players[4].chips).toBe(42);
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(makeShowdownGame()).pot).toBe(0);
+  });
+
+  it('winners array has the correct first-place winner', () => {
+    const result = updateRoundState(makeShowdownGame());
+    const firstWinner = result.winners[0] as PlayerState;
+    expect(firstWinner.id).toBe('0');
+  });
+});
+
+// --- Integration: same scenario but 2nd place all-in for 15 instead of 20 ---
+// NOTE: Correct poker logic would give P1=10, P2=5 (P2 gets their excess 5 back).
+// The code gives P1 the entire remaining pot (15) and P2 goes bust — a known side-pot bug.
+
+describe('5-player river showdown: 2nd place all-in for 15 (exposes side-pot bug)', () => {
+  // P0 (Winner)      — all-in for 10, pair of aces
+  // P1 (Second)      — all-in for 15, pair of kings
+  // P2 (Third)       — all-in for 20, pair of queens
+  // P3 (FoldedFive)  — folded after 5; has 45 chips remaining
+  // P4 (FoldedEight) — folded after 8; has 42 chips remaining
+  // Pot = 10+15+20+5+8 = 58
+  // P0 wins 43 (side-pot cap: 10 from each player)
+  // Remaining pot = 15 → code gives all 15 to P1; correct poker would give P1=10, P2=5
+  const makeShowdownGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'Winner',      hand: [c('ace', 'spades'),    c('ace', 'hearts')],    chips: 0,  currentBet: 10, status: 'active' },
+      { id: '1', name: 'Second',      hand: [c('king', 'hearts'),   c('king', 'diamonds')], chips: 0,  currentBet: 15, status: 'active' },
+      { id: '2', name: 'Third',       hand: [c('queen', 'diamonds'), c('queen', 'clubs')],  chips: 0,  currentBet: 20, status: 'active' },
+      { id: '3', name: 'FoldedFive',  hand: [],                                             chips: 45, currentBet: 5,  status: 'folded' },
+      { id: '4', name: 'FoldedEight', hand: [],                                             chips: 42, currentBet: 8,  status: 'folded' },
+    ],
+    deck: [],
+    tableCards: [c('7', 'spades'), c('8', 'hearts'), c('2', 'clubs'), c('3', 'diamonds'), c('4', 'spades')],
+    pot: 58,
+    currentBet: 20,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('sets phase to end', () => {
+    expect(updateRoundState(makeShowdownGame()).phase).toBe('end');
+  });
+
+  it('winner (all-in for 10) collects 43 chips via side pot', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[0].chips).toBe(43);
+  });
+
+  it('2nd place (all-in for 15) collects 10 chips — the portion of the pot at their level', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[1].chips).toBe(10);
+  });
+
+  it('3rd place (all-in for 20) gets their excess 5 chips back (no one else competed at that level)', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[2].chips).toBe(5);
+    expect(result.players[2].status).toBe('active');
+  });
+
+  it('folded players keep their remaining chips untouched', () => {
+    const result = updateRoundState(makeShowdownGame());
+    expect(result.players[3].chips).toBe(45);
+    expect(result.players[4].chips).toBe(42);
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(makeShowdownGame()).pot).toBe(0);
+  });
+});
+
+// --- Integration: two players tie and split the pot ---
+
+describe('3-player river showdown: two players tie and split the pot', () => {
+  // P0 (TieA) and P1 (TieB) both play the board (AA+KK+Q two pair) — their hole cards don't improve it
+  // P2 (Folder) folded after 10 chips; has 40 chips remaining
+  // Pot = 20+20+10 = 50 → each tied player wins 25
+  const makeTieGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'TieA',   hand: [c('2', 'spades'),  c('3', 'hearts')],   chips: 0,  currentBet: 20, status: 'active' },
+      { id: '1', name: 'TieB',   hand: [c('4', 'clubs'),   c('5', 'diamonds')], chips: 0,  currentBet: 20, status: 'active' },
+      { id: '2', name: 'Folder', hand: [],                                      chips: 40, currentBet: 10, status: 'folded' },
+    ],
+    deck: [],
+    tableCards: [c('ace', 'spades'), c('ace', 'hearts'), c('king', 'clubs'), c('king', 'diamonds'), c('queen', 'spades')],
+    pot: 50,
+    currentBet: 20,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('sets phase to end', () => {
+    expect(updateRoundState(makeTieGame()).phase).toBe('end');
+  });
+
+  it('first tied player receives half the pot (25 chips)', () => {
+    const result = updateRoundState(makeTieGame());
+    expect(result.players[0].chips).toBe(25);
+  });
+
+  it('second tied player receives half the pot (25 chips)', () => {
+    const result = updateRoundState(makeTieGame());
+    expect(result.players[1].chips).toBe(25);
+  });
+
+  it('folded player keeps their remaining chips untouched', () => {
+    const result = updateRoundState(makeTieGame());
+    expect(result.players[2].chips).toBe(40);
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(makeTieGame()).pot).toBe(0);
+  });
+
+  it('winners contains a tie group with both players', () => {
+    const result = updateRoundState(makeTieGame());
+    expect(Array.isArray(result.winners[0])).toBe(true);
+    expect((result.winners[0] as PlayerState[]).length).toBe(2);
+  });
+});
+
+// --- Integration: asymmetric tie — tied players have different bets ---
+
+describe('2-player river showdown: tie with unequal bets (10 vs 20)', () => {
+  // P0 and P1 both play the board (AA+KK+Q two pair) — tied
+  // P0 bet 10, P1 bet 20 → P0 wins their half of the shared 20-chip pot (10)
+  // P1 wins their shared portion (10) plus their unmatched excess (10) = 20
+  // Pot = 30
+  const makeAsymmetricTieGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'TieSmall', hand: [c('2', 'spades'),  c('3', 'hearts')],   chips: 0, currentBet: 10, status: 'active' },
+      { id: '1', name: 'TieBig',   hand: [c('4', 'clubs'),   c('5', 'diamonds')], chips: 0, currentBet: 20, status: 'active' },
+    ],
+    deck: [],
+    tableCards: [c('ace', 'spades'), c('ace', 'hearts'), c('king', 'clubs'), c('king', 'diamonds'), c('queen', 'spades')],
+    pot: 30,
+    currentBet: 20,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('smaller-bet tied player wins their capped share (10 chips)', () => {
+    const result = updateRoundState(makeAsymmetricTieGame());
+    expect(result.players[0].chips).toBe(10);
+  });
+
+  it('larger-bet tied player wins their shared portion plus unmatched excess (20 chips)', () => {
+    const result = updateRoundState(makeAsymmetricTieGame());
+    expect(result.players[1].chips).toBe(20);
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(makeAsymmetricTieGame()).pot).toBe(0);
+  });
+});
+
+// --- Integration: 4-player showdown — tie for 1st with unequal bets, 4th place gets excess back ---
+
+describe('4-player river showdown: tie for 1st (bets 5 and 10), 3rd and 4th place, 4th gets excess back', () => {
+  // P0 and P1 tie for 1st — both play the board (AA+KK+Q two pair)
+  // P2 is 3rd — plays AA+KK+J
+  // P3 is 4th — plays AA+KK+10, bet 25 but no one matched above 20 so gets 5 back
+  // Pot = 5+10+20+25 = 60
+  // Side pots:
+  //   Pot 1 (up to 5 each × 4): 20 — split between P0 and P1: 10 each
+  //   Pot 2 (up to 10, 3 players): 15 — P1 wins
+  //   Pot 3 (up to 20, P2 and P3): 20 — P2 wins
+  //   Pot 4 (P3 excess above 20): 5 — returned to P3
+  const make4PlayerTieGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'TieSmall', hand: [c('queen', 'hearts'),  c('3', 'diamonds')], chips: 0, currentBet: 5,  status: 'active' },
+      { id: '1', name: 'TieBig',   hand: [c('queen', 'diamonds'), c('4', 'clubs')],   chips: 0, currentBet: 10, status: 'active' },
+      { id: '2', name: 'Third',    hand: [c('jack', 'hearts'),   c('5', 'spades')],   chips: 0, currentBet: 20, status: 'active' },
+      { id: '3', name: 'Fourth',   hand: [c('10', 'clubs'),      c('6', 'diamonds')], chips: 0, currentBet: 25, status: 'active' },
+    ],
+    deck: [],
+    tableCards: [c('ace', 'spades'), c('ace', 'hearts'), c('king', 'clubs'), c('king', 'diamonds'), c('2', 'spades')],
+    pot: 60,
+    currentBet: 25,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('1st-place tied player (bet 5) wins 10 chips', () => {
+    const result = updateRoundState(make4PlayerTieGame());
+    expect(result.players[0].chips).toBe(10);
+  });
+
+  it('1st-place tied player (bet 10) wins 25 chips (10 shared + 15 side pot)', () => {
+    const result = updateRoundState(make4PlayerTieGame());
+    expect(result.players[1].chips).toBe(25);
+  });
+
+  it('3rd place (bet 20) wins 20 chips', () => {
+    const result = updateRoundState(make4PlayerTieGame());
+    expect(result.players[2].chips).toBe(20);
+  });
+
+  it('4th place (bet 25) gets their 5-chip excess returned and is not busted', () => {
+    const result = updateRoundState(make4PlayerTieGame());
+    expect(result.players[3].chips).toBe(5);
+    expect(result.players[3].status).toBe('active');
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(make4PlayerTieGame()).pot).toBe(0);
+  });
+});
+
+// --- Integration: symmetric tie with odd pot (1 leftover chip) ---
+
+describe('3-player river showdown: symmetric tie with odd pot from third-place all-in', () => {
+  // P0 (TieA) and P1 (TieB) both have pair of aces — tied
+  // P2 (Third) has king-high — loses, having bet 11 (creating an odd pot)
+  // Pot = 20+20+11 = 51
+  // floor(51/2) = 25 each; leftover 1 chip goes to TieB (first seat left of dealer at index 0)
+  // NOTE: current Math.round logic awards 26 to both and leaves pot at -1 — this test documents the correct behavior
+  const makeOddPotTieGame = (): GameState => ({
+    players: [
+      { id: '0', name: 'TieA',  hand: [c('ace', 'spades'),  c('ace', 'hearts')],   chips: 0, currentBet: 20, status: 'active' },
+      { id: '1', name: 'TieB',  hand: [c('ace', 'clubs'),   c('ace', 'diamonds')], chips: 0, currentBet: 20, status: 'active' },
+      { id: '2', name: 'Third', hand: [c('2', 'spades'),    c('7', 'clubs')],      chips: 0, currentBet: 11, status: 'active' },
+    ],
+    deck: [],
+    tableCards: [c('king', 'hearts'), c('queen', 'spades'), c('jack', 'clubs'), c('3', 'diamonds'), c('4', 'hearts')],
+    pot: 51,
+    currentBet: 20,
+    smallBlind: 2,
+    bigBlind: 4,
+    dealerIndex: 0,
+    currentPlayerIndex: 0,
+    lastRaisePlayerIndex: 1,
+    phase: 'river',
+    winners: [],
+    error: '',
+  });
+
+  it('sets phase to end', () => {
+    expect(updateRoundState(makeOddPotTieGame()).phase).toBe('end');
+  });
+
+  it('first tied player (TieA) receives floor share — 25 chips', () => {
+    const result = updateRoundState(makeOddPotTieGame());
+    expect(result.players[0].chips).toBe(25);
+  });
+
+  it('second tied player (TieB, first seat left of dealer) receives floor share plus odd chip — 26 chips', () => {
+    const result = updateRoundState(makeOddPotTieGame());
+    expect(result.players[1].chips).toBe(26);
+  });
+
+  it('third place (all-in for 11, lost) ends with 0 chips and is busted', () => {
+    const result = updateRoundState(makeOddPotTieGame());
+    expect(result.players[2].chips).toBe(0);
+    expect(result.players[2].status).toBe('busted');
+  });
+
+  it('pot is fully distributed (0 remaining)', () => {
+    expect(updateRoundState(makeOddPotTieGame()).pot).toBe(0);
   });
 });

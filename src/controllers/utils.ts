@@ -11,6 +11,15 @@ const getNextActiveIndex = (players: PlayerState[], startIndex: number) => {
   return index;
 }
 
+const getNextActivePlayer = (players: PlayerState[], startIndex: number) => {
+  let index = startIndex;
+  do {
+    index = (index + 1) % players.length;
+  } while (players[index].status === 'busted' || players[index].status === 'folded');
+
+  return players[index];
+}
+
 const createDeck = ():CardState[] => {
   const cards: CardState[] = [];
   const suits: Array<Suit> = ['spades', 'hearts', 'diamonds', 'clubs'];
@@ -270,6 +279,7 @@ const copyPlayers = (players: PlayerState[]): PlayerState[] =>
 
 export {
   getNextActiveIndex,
+  getNextActivePlayer,
   createDeck,
   shuffleDeck,
   howManyActivePlayers,
