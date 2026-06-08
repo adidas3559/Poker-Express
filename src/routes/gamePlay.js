@@ -92,5 +92,11 @@ module.exports = (io, rooms) => {
       autoFoldDisconnected(io, roomCode);
     });
 
+    socket.on('emote', ({ roomCode, playerId, emoji }) => {
+      const room = rooms[roomCode];
+      if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
+      io.to(roomCode).emit('emoteReceived', { playerId, emoji });
+    });
+
   });
 };

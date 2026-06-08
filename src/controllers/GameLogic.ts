@@ -407,6 +407,7 @@ const declareWinner = (winners: nestedPlayers, game: GameState): GameState => {
           // p.currentBet = Math.round(playerBet / (winnerGroup.length - index));
         });
 
+        // this is for if there's a leftover chip after split
         if (currentGroupSize >= 2 && carryOver > 0) {
           const closestToDealer2 = getNextActivePlayer(players.filter(p => winnerGroup.some(w => w.id === p.id)), game.dealerIndex);
 
