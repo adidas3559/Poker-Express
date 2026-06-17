@@ -55,7 +55,7 @@ type RoomState = {
 
 const initGame = (room: RoomState): GameState => {
   const players: PlayerState[] = room.players.map(p => {
-    return createPlayer(p.id, p.nickname, 20);
+    return createPlayer(p.id, p.nickname, 100);
   });
   return createGame(players);
 }
